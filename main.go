@@ -13,26 +13,42 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer f.Close()
 
-
-	current_line := ""
-
-	for {
-		buf := make([]uint8, 8)
-		bytes_read, err := f.Read(buf)
-
-		if err == io.EOF || bytes_read == 0 {
-			fmt.Printf("read: %s\n", current_line)
-			break
-		}
-
-		parts := strings.Split(string(buf), "\n")
-
-		current_line += parts[0]
-		if len(parts) > 1 {
-			fmt.Printf("read: %s\n", current_line)
-			current_line = parts[1]
-		}
+	ch := getLinesChannel(f)
+	
+	for newLine := range ch {
+		fmt.Printf("read: %s\n", newLine)
 	}
+
+
+}
+
+func getLinesChannel(f io.ReadCloser) <-chan string {
+	currentLine := ""
+
+	ch := make(chan string)
+
+	go func() {
+		for {
+			buf := make([]uint8, 8)
+			bytes_read, err := f.Read(buf)
+
+			if err == io.EOF || bytes_read == 0 {
+				ch <- currentLine
+				defer f.Close()
+				close(ch)
+				break
+			}
+
+			parts := strings.Split(string(buf), "\n")
+
+			currentLine += parts[0]
+			if len(parts) > 1 {
+				ch <- currentLine
+				currentLine = parts[1]
+			}
+		}
+	}()
+
+	return ch
 }
