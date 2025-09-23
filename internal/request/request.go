@@ -54,24 +54,36 @@ var ErrInvalidMethod = fmt.Errorf("invalid method")
 var SEPARATOR = "\r\n"
 
 func (r *Request) parse(data []byte) (int, error) {
+	rl, n, err := parseRequestLine(string(data))
+	if err != nil {
+		return n, err
+	}
 
+	if n == 0 { // need more data
+		return 0, nil
+	}
+
+	r.RequestLine = *rl
+	r.state = "done"
+
+	return n, nil
 }
 
 func parseRequestLine(s string) (*RequestLine, int, error) {
 	idx := strings.Index(s, SEPARATOR)
-	if idx == -1 {
-		return nil, s, nil
+	if idx == -1 { // not enough data
+		return nil, 0, nil
 	}
 
 	startLine := s[:idx]
-	restOfString := s[idx+len(SEPARATOR):] // START_LINE\r\n ->the rest
+	consumedN := idx + len(SEPARATOR) // START_LINE\r\n ->the rest
 
 	requestLineParts := strings.Split(startLine, " ")	
 
 	fmt.Println(requestLineParts)
 
 	if len(requestLineParts) != 3 {
-		return nil, restOfString, ErrIncompleteRequestLine// Empty
+		return nil, consumedN, ErrIncompleteRequestLine// Empty
 	}
 
 	versionParts := strings.Split(requestLineParts[2], "/")
@@ -83,14 +95,14 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
 	}
 
 	if !requestLine.ValidHTTP() {
-		return nil, restOfString, ErrUnsupportedVersion
+		return nil, consumedN, ErrUnsupportedVersion
 	}
 
 	if !requestLine.ValidMethod() {
-		return nil, restOfString, ErrInvalidMethod
+		return nil, consumedN, ErrInvalidMethod
 	}
 
-	return  requestLine, restOfString, nil
+	return  requestLine, consumedN, nil
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
