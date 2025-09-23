@@ -53,6 +53,7 @@ var ErrUnsupportedVersion = fmt.Errorf("unsupported HTTP version")
 var ErrInvalidMethod = fmt.Errorf("invalid method")
 var SEPARATOR = "\r\n"
 
+// TODO: use a switch and enum for this
 func (r *Request) parse(data []byte) (int, error) {
 	rl, n, err := parseRequestLine(string(data))
 	if err != nil {

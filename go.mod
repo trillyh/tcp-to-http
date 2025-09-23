@@ -1,4 +1,4 @@
-module http
+module https
 
 go 1.25.1
 
