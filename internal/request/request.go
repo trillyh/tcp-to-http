@@ -41,7 +41,7 @@ type Request struct {
 	state parserState
 }
 
-func newRequest() *Request {
+func NewRequest() *Request {
 	return &Request {
 		state: initialzed,
 	}
@@ -52,23 +52,6 @@ var ErrIncompleteRequestLine = fmt.Errorf("incomplete start line")
 var ErrUnsupportedVersion = fmt.Errorf("unsupported HTTP version")
 var ErrInvalidMethod = fmt.Errorf("invalid method")
 var SEPARATOR = "\r\n"
-
-// TODO: use a switch and enum for this
-func (r *Request) parse(data []byte) (int, error) {
-	rl, n, err := parseRequestLine(string(data))
-	if err != nil {
-		return n, err
-	}
-
-	if n == 0 { // need more data
-		return 0, nil
-	}
-
-	r.RequestLine = *rl
-	r.state = "done"
-
-	return n, nil
-}
 
 func parseRequestLine(s string) (*RequestLine, int, error) {
 	idx := strings.Index(s, SEPARATOR)
@@ -106,8 +89,25 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
 	return  requestLine, consumedN, nil
 }
 
+// TODO: use a switch and enum for this
+func (r *Request) parse(data []byte) (int, error) {
+	rl, n, err := parseRequestLine(string(data))
+	if err != nil {
+		return n, err
+	}
+
+	if n == 0 { // need more data
+		return 0, nil
+	}
+
+	r.RequestLine = *rl
+	r.state = "done"
+
+	return n, nil
+}
+
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request := newRequest()
+	request := NewRequest()
 
 	// buf could overrun when header + body > 1k 
 	buf := make([]byte, 1024)
