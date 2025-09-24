@@ -3,6 +3,7 @@ package headers
 import (
 	"strings"
 	"fmt"
+	"bytes"
 )
 
 func isTokenChar(r rune) bool {
@@ -21,50 +22,65 @@ func isTokenChar(r rune) bool {
 	return false
 }
 
+type Headers struct {
+	headers map[string]string
+}
 
-type Headers map[string]string
-func NewHeaders() Headers {
-	return Headers{}
+func NewHeaders() *Headers {
+	return &Headers{
+		headers: map[string]string{},
+	}
+}
+
+func (h *Headers) Get(name string) string {
+	return h.headers[strings.ToLower(name)]
+}
+
+func (h *Headers) Set(name string, value string) {
+	name = strings.ToLower(name)
+
+	if v, ok := h.headers[name]; ok {
+		h.headers[name] = fmt.Sprintf("%s, %s", v, value)
+	} else {
+		h.headers[name] = value
+	}
 }
 
 var ErrFieldNameContainsSpace = fmt.Errorf("field name contains space")
 var ErrBadFieldName = fmt.Errorf("bad field-name")
-var SEPARATOR = "\r\n"
+var CRLF = []byte("\r\n")
 
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
-	in := string(data)
-	idx := strings.Index(in, SEPARATOR)
+	idx := bytes.Index(data, CRLF)
 	if idx == -1 {
 		return 0, false, nil
 	}
 
 	if idx == 0 {
-		return 0, true, nil
+		return 2, true, nil // consume 2 bytes (CRLF)
 	}
 
-	consumedN := idx + len(SEPARATOR)
+	consumedN := idx + len(CRLF)
 
-	field := in[:idx]
-	parts := strings.SplitN(field, ":", 2)
+	field := data[:idx]
+	parts := bytes.SplitN(field, []byte(":"), 2)
 	fieldName := parts[0]
 	fieldValue := parts[1]
 	
-	if strings.HasSuffix(fieldName, " ") || len(fieldName) < 1 {
+	if bytes.HasSuffix(fieldName, []byte(" ")) || len(fieldName) < 1 {
 		return 0, false, ErrFieldNameContainsSpace
 	}
 
 	// constraint here
 	for _, r := range fieldName {
-		if !isTokenChar(r) {
+		if !isTokenChar(rune(r)) {
 			return 0, false, ErrBadFieldName
 		}
 	}
 
-	fieldName = strings.ToLower(fieldName)
+	fieldName, fieldValue = bytes.TrimSpace(fieldName), bytes.TrimSpace(fieldValue)
 
-	fieldName, fieldValue = strings.TrimSpace(fieldName), strings.TrimSpace(fieldValue)
-	h[fieldName] = fieldValue
+	h.Set(string(fieldName), string(fieldValue))
 
-	fmt.Printf("Consumed %d", idx)
 	return consumedN, false, nil
 }

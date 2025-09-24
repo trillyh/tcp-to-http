@@ -5,6 +5,9 @@ import (
 	"io"
 	"strings"
 	"unicode"
+	"https/internal/headers"
+	"bytes"
+	"errors"
 )
 
 func (r *RequestLine) ValidHTTP() bool {
@@ -24,26 +27,30 @@ func (r *RequestLine) ValidMethod() bool {
 	return isAllUpper && isAlphaBet
 }
 
+type parserState string
+const (
+    initialized   parserState = "init"
+    parsingRl     parserState = "parsingRl"
+    parsingHeader parserState = "parsingHeader"
+    done          parserState = "done"
+)
+
+
 type RequestLine struct {
 	HttpVersion   string
 	RequestTarget string
 	Method        string
 }
 
-type parserState string
-const (
-	initialzed = "init"
-	done = "done"
-)
-
 type Request struct {
 	RequestLine RequestLine // Ex: GET /coffee HTTP/1.1
+	Headers headers.Headers
 	state parserState
 }
 
 func NewRequest() *Request {
 	return &Request {
-		state: initialzed,
+		state: initialized,
 	}
 }
 
@@ -51,18 +58,18 @@ var ErrBadRequestLine = fmt.Errorf("bad request-line")
 var ErrIncompleteRequestLine = fmt.Errorf("incomplete start line")
 var ErrUnsupportedVersion = fmt.Errorf("unsupported HTTP version")
 var ErrInvalidMethod = fmt.Errorf("invalid method")
-var SEPARATOR = "\r\n"
+var SEPARATOR = []byte("\r\n")
 
-func parseRequestLine(s string) (*RequestLine, int, error) {
-	idx := strings.Index(s, SEPARATOR)
+func parseRequestLine(b []byte) (*RequestLine, int, error) {
+	idx := bytes.Index(b, SEPARATOR)
 	if idx == -1 { // not enough data
 		return nil, 0, nil
 	}
 
-	startLine := s[:idx]
+	startLine := b[:idx]
 	consumedN := idx + len(SEPARATOR) // START_LINE\r\n ->the rest
 
-	requestLineParts := strings.Split(startLine, " ")	
+	requestLineParts := bytes.Split(startLine, []byte(" "))	
 
 	fmt.Println(requestLineParts)
 
@@ -70,12 +77,12 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
 		return nil, consumedN, ErrIncompleteRequestLine// Empty
 	}
 
-	versionParts := strings.Split(requestLineParts[2], "/")
+	versionParts := bytes.Split(requestLineParts[2], []byte("/"))
 
 	requestLine := &RequestLine{
-		Method: requestLineParts[0],
-		RequestTarget: requestLineParts[1],
-		HttpVersion: versionParts[1],
+		Method: string(requestLineParts[0]),
+		RequestTarget: string(requestLineParts[1]),
+		HttpVersion: string(versionParts[1]),
 	}
 
 	if !requestLine.ValidHTTP() {
@@ -91,19 +98,37 @@ func parseRequestLine(s string) (*RequestLine, int, error) {
 
 // TODO: use a switch and enum for this
 func (r *Request) parse(data []byte) (int, error) {
-	rl, n, err := parseRequestLine(string(data))
-	if err != nil {
-		return n, err
+	switch r.state {
+	case parsingRl:
+		rl, n, err := parseRequestLine(data)
+		if err != nil {
+			return 0, err
+		}
+
+		if n == 0 { // need more data
+			return 0, nil
+		}
+
+		r.RequestLine = *rl
+		r.state = parsingHeader
+
+		return n, nil
+
+	case parsingHeader:
+		if r.Headers == nil {
+			r.Headers = headers.NewHeaders()
+		}
+		n, isHeaderDone, err := r.Headers.Parse(data)
+		if err != nil {
+			return n, err
+		}
+
+		if isHeaderDone {
+			r.state = done
+			return n, err
+		}
 	}
-
-	if n == 0 { // need more data
-		return 0, nil
-	}
-
-	r.RequestLine = *rl
-	r.state = "done"
-
-	return n, nil
+	return 0, nil
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
@@ -112,14 +137,24 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	// buf could overrun when header + body > 1k 
 	buf := make([]byte, 1024)
 	bufLen := 0 // valid bytes currently in the buffer
-	for request.state != "done" {
+
+	request.state = parsingRl
+	for request.state != done {
 		// Read from bufLen(start from 0) to 1024
 		// n is the number of bytes it has read (element in the buf right now)
 		n, err := reader.Read(buf[bufLen:]) 
+
 		if err != nil {
+			// Read returns n > 0, it may return err == nil or err == io.EOF (subsequent call after data stop comming in)
+			if errors.Is(err, io.EOF) {  // <----------------- last read
+				request.state = done
+				break
+			}
+			fmt.Println("error when read from Reader")
 			return nil, err
 		}
 
+		if n > 0 {
 		bufLen += n 
 		// pass in the buf from 0->bufLen to the request's parser
 		// parseN is the number of bytes the request parsed (read)
@@ -133,6 +168,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		// shift left (use big brain)
 		copy(buf, buf[parsedN:bufLen])
 		bufLen -= parsedN 	
+		}
 	}
 
 	return request, nil
