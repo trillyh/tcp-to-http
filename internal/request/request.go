@@ -94,8 +94,22 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 	return  requestLine, consumedN, nil
 }
 
-// TODO: use a switch and enum for this
 func (r *Request) parse(data []byte) (int, error) {
+	parsedN := 0
+	for r.state != done {
+		n, err := r.parseSingle(data[parsedN:])
+		if err != nil {
+			return 0, err
+		}
+		parsedN += n
+		if n == 0 {
+			break
+		}
+	}
+	return parsedN, nil
+} 
+
+func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.state {
 	case parsingRl:
 		rl, n, err := parseRequestLine(data)
@@ -146,7 +160,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		if err != nil {
 			// Read returns n > 0, it may return err == nil or err == io.EOF (subsequent call after data stop comming in)
 			if errors.Is(err, io.EOF) {  // <----------------- last read
-				request.state = done
+				if request.state != done {
+					return nil, fmt.Errorf("incomplete request, in state: %s, read n bytes on EOF: %d", request.state, n)
+				}	
 				break
 			}
 			return nil, err

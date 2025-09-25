@@ -46,6 +46,13 @@ func (h *Headers) Set(name string, value string) {
 	}
 }
 
+func (h *Headers) All() map[string]string {
+	if h == nil {
+		return nil
+	}
+	return h.headers
+}
+
 var ErrFieldNameContainsSpace = fmt.Errorf("field name contains space")
 var ErrBadFieldName = fmt.Errorf("bad field-name")
 var CRLF = []byte("\r\n")
