@@ -44,7 +44,7 @@ type RequestLine struct {
 
 type Request struct {
 	RequestLine RequestLine // Ex: GET /coffee HTTP/1.1
-	Headers headers.Headers
+	Headers *headers.Headers
 	state parserState
 }
 
@@ -70,8 +70,6 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 	consumedN := idx + len(SEPARATOR) // START_LINE\r\n ->the rest
 
 	requestLineParts := bytes.Split(startLine, []byte(" "))	
-
-	fmt.Println(requestLineParts)
 
 	if len(requestLineParts) != 3 {
 		return nil, consumedN, ErrIncompleteRequestLine// Empty
@@ -127,6 +125,7 @@ func (r *Request) parse(data []byte) (int, error) {
 			r.state = done
 			return n, err
 		}
+		return n, err
 	}
 	return 0, nil
 }
@@ -140,8 +139,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 	request.state = parsingRl
 	for request.state != done {
-		// Read from bufLen(start from 0) to 1024
-		// n is the number of bytes it has read (element in the buf right now)
+		// Read and append to buf at right side of buf[bufLen] 
+		// buf[bufLen:] is the remaining free space of the buffer
 		n, err := reader.Read(buf[bufLen:]) 
 
 		if err != nil {
@@ -150,13 +149,11 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 				request.state = done
 				break
 			}
-			fmt.Println("error when read from Reader")
 			return nil, err
 		}
 
-		if n > 0 {
 		bufLen += n 
-		// pass in the buf from 0->bufLen to the request's parser
+		// pass the bufLen of valid bytes in buf to parse.
 		// parseN is the number of bytes the request parsed (read)
 		parsedN, err := request.parse(buf[:bufLen])
 		if err != nil {
@@ -168,7 +165,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		// shift left (use big brain)
 		copy(buf, buf[parsedN:bufLen])
 		bufLen -= parsedN 	
-		}
 	}
 
 	return request, nil
