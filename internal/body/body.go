@@ -7,12 +7,14 @@ import (
 type Body struct {
 	Body string
 	ContentLength int
+	CurrentCL int
 }
 
 func NewBody() *Body {
 	return &Body {
 		Body: string(""),
 		ContentLength: 0,
+		CurrentCL: 0,
 	}
 }
 
@@ -36,5 +38,7 @@ func (b *Body) Parse(data []byte) (int, bool, error) {
 	// Todo refractor this
 	b.Body += string(currLine) + "\n" // add back the /n
 
-	return consumedN, true, nil
+	b.CurrentCL += consumedN
+
+	return consumedN, b.CurrentCL == consumedN, nil
 }
