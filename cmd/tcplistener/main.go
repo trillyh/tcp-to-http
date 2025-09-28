@@ -9,10 +9,6 @@ import (
 	"https/internal/request"
 )
 
-
-
-
-
 func readFromFiles(path string) (f io.ReadCloser) {
 	f, err := os.OpenFile("messages.txt", os.O_RDONLY, 0644)
 

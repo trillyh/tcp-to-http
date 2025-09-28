@@ -6,22 +6,6 @@ import (
 	"bytes"
 )
 
-func isTokenChar(r rune) bool {
-	if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
-		return true
-	}
-
-	if r >= '0' && r <= '9' {
-		return true
-	}
-
-	switch r {
-	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~' :
-		return true
-	}		
-	return false
-}
-
 type Headers struct {
 	headers map[string]string
 }
@@ -51,6 +35,22 @@ func (h *Headers) All() map[string]string {
 		return nil
 	}
 	return h.headers
+}
+
+func isTokenChar(r rune) bool {
+	if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+		return true
+	}
+
+	if r >= '0' && r <= '9' {
+		return true
+	}
+
+	switch r {
+	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~' :
+		return true
+	}		
+	return false
 }
 
 var ErrFieldNameContainsSpace = fmt.Errorf("field name contains space")

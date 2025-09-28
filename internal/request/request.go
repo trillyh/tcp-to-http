@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"unicode"
+	"strconv"
 )
 
 func (r *RequestLine) ValidHTTP() bool {
@@ -53,6 +54,7 @@ type Request struct {
 func NewRequest() *Request {
 	return &Request {
 		state: initialized,
+		Body: body.NewBody(),
 	}
 }
 
@@ -95,6 +97,60 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 
 	return  requestLine, consumedN, nil
 }
+ 
+func (r *Request) parseSingle(data []byte) (int, error) {
+	switch r.state {
+	case parsingRl:
+		rl, n, err := parseRequestLine(data)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 { // need more data
+			return 0, nil
+		}
+		r.RequestLine = *rl 
+		r.state = parsingHeader
+		return n, nil
+	case parsingHeader:
+		if r.Headers == nil {
+			r.Headers = headers.NewHeaders()
+		}
+		n, isHeaderDone, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if isHeaderDone {
+			cl := r.Headers.Get("content-length") 
+			if cl == "" { // nothing in body to parse
+				r.state = done
+
+			} else {
+				r.Body.ContentLength, err = strconv.Atoi(cl)
+				if err != nil {
+					r.state = done
+					return n, fmt.Errorf("erorr when trying to convert contentlength to int")
+				}
+				r.state = parsingBody
+			}
+			return n, err 
+		}
+		return n, nil
+	case parsingBody:
+		n, isBodyDone, err := r.Body.Parse(data)
+		if err != nil {
+			return n, err
+		}	
+		if isBodyDone {
+			r.state = done
+			return n, err
+		}
+		return n, err
+	
+	case done:
+		return 0, fmt.Errorf("error trying to read in done state")
+	}
+	return 0, fmt.Errorf("unknown state")
+}
 
 func (r *Request) parse(data []byte) (int, error) {
 	parsedN := 0
@@ -109,98 +165,63 @@ func (r *Request) parse(data []byte) (int, error) {
 		}
 	}
 	return parsedN, nil
-} 
-
-func (r *Request) parseSingle(data []byte) (int, error) {
-	switch r.state {
-	case parsingRl:
-		rl, n, err := parseRequestLine(data)
-		if err != nil {
-			return 0, err
-		}
-
-		if n == 0 { // need more data
-			return 0, nil
-		}
-
-		r.RequestLine = *rl 
-		r.state = parsingHeader
-
-		return n, nil
-
-	case parsingHeader:
-		if r.Headers == nil {
-			r.Headers = headers.NewHeaders()
-		}
-		n, isHeaderDone, err := r.Headers.Parse(data)
-		if err != nil {
-			return n, err
-		}
-
-		if isHeaderDone {
-			cl := r.Headers.Get("content-length") 
-			if cl == "" {
-				r.state = done
-			} else {
-				r.state = parsingBody
-			}
-			return n, err 
-		}
-		return n, err
-
-	case parsingBody:
-		n, isBodyDone, err := r.Body.Parse(data)
-		if err != nil {
-			return n, err
-		}	
-
-		if isBodyDone {
-			r.state = done
-			return n, err
-		}
-		return n, err
-	}
-
-	return 0, nil
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request := NewRequest()
+	r := NewRequest()
 
 	// buf could overrun when header + body > 1k 
 	buf := make([]byte, 1024)
 	bufLen := 0 // valid bytes currently in the buffer
 
-	request.state = parsingRl
-	for request.state != done {
+	r.state = parsingRl
+	for r.state != done {
 		// Read and append to buf at right side of buf[bufLen] 
 		// buf[bufLen:] is the remaining free space of the buffer
 		n, err := reader.Read(buf[bufLen:]) 
-
+		if n > 0 {
+			bufLen += n 
+			// pass the bufLen of valid bytes in buf to parse.
+			// parseN is the number of bytes the request parsed (read)
+			parsedN, parseErr := r.parse(buf[:bufLen])
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			copy(buf, buf[parsedN:bufLen])
+			bufLen -= parsedN 	
+			// data from bufLen up to parsedN is already consumed, so no longer need 0<----bufLen and update bufLen
+			// buf[parsedN:bufLen] are still unparsed leftovers
+			// shift left (use big brain)
+		}
 		if err != nil {
 			// Read returns n > 0, it may return err == nil or err == io.EOF (subsequent call after data stop comming in)
 			if errors.Is(err, io.EOF) {  // <----------------- last read
-				if request.state != done {
-					return nil, fmt.Errorf("incomplete request, in state: %s, read n bytes on EOF: %d", request.state, n)
+				// drain buffer
+				if (bufLen > 0 && r.state != done) {
+					fmt.Printf("draining buffer with bufLen %d, \"%s\" \n",bufLen, string(buf[:bufLen]))
+					parseN, pErr := r.parse(buf[:bufLen])
+					fmt.Printf("state %s", r.state)
+					if pErr != nil {
+						return nil, pErr
+					}
+
+					if len(r.Body.Body) != r.Body.ContentLength {
+						return nil, fmt.Errorf("body's len does not match content length %d != %d",
+							len(r.Body.Body), r.Body.ContentLength)
+					} else {
+						r.state = done
+					}
+					copy(buf, buf[parseN:bufLen])
+					bufLen -= parseN
+					// after this r.state should be done, else err
+				}
+				if r.state != done {
+					return nil, fmt.Errorf("incomplete request, in state: %s, read n bytes on EOF: %d", r.state, n)
 				}	
 				break
 			}
 			return nil, err
 		}
-
-		bufLen += n 
-		// pass the bufLen of valid bytes in buf to parse.
-		// parseN is the number of bytes the request parsed (read)
-		parsedN, err := request.parse(buf[:bufLen])
-		if err != nil {
-			return nil, err
-		}
-
-		// data from bufLen up to parsedN is already consumed, so no longer need 0<----bufLen and update bufLen
-		// buf[parsedN:bufLen] are still unparsed leftovers
-		// shift left (use big brain)
-		copy(buf, buf[parsedN:bufLen])
-		bufLen -= parsedN 	
 	}
-	return request, nil
+	return r, nil
 }
