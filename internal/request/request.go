@@ -193,35 +193,46 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 			// buf[parsedN:bufLen] are still unparsed leftovers
 			// shift left (use big brain)
 		}
-		if err != nil {
-			// Read returns n > 0, it may return err == nil or err == io.EOF (subsequent call after data stop comming in)
-			if errors.Is(err, io.EOF) {  // <----------------- last read
+		if err == nil {
+			continue
+		}
+
+		switch {
+		case errors.Is(err, io.EOF):
 				// drain buffer
 				if (bufLen > 0 && r.state != done) {
-					fmt.Printf("draining buffer with bufLen %d, \"%s\" \n",bufLen, string(buf[:bufLen]))
-					parseN, pErr := r.parse(buf[:bufLen])
-					fmt.Printf("state %s", r.state)
+					parseN, pErr := drainAndParse(r, buf[:bufLen])
 					if pErr != nil {
-						return nil, pErr
-					}
-
-					if len(r.Body.Body) != r.Body.ContentLength {
-						return nil, fmt.Errorf("body's len does not match content length %d != %d",
-							len(r.Body.Body), r.Body.ContentLength)
-					} else {
-						r.state = done
+						return nil, err
 					}
 					copy(buf, buf[parseN:bufLen])
 					bufLen -= parseN
 					// after this r.state should be done, else err
 				}
+
 				if r.state != done {
 					return nil, fmt.Errorf("incomplete request, in state: %s, read n bytes on EOF: %d", r.state, n)
 				}	
-				break
+				
+		default:
+			return nil, err		
 			}
-			return nil, err
-		}
-	}
+		}	
 	return r, nil
+}
+
+func drainAndParse(r *Request, data []byte) (int, error) {
+	fmt.Printf("draining buffer with bufLen %d, \"%s\" \n", len(data), string(data))
+	parseN, pErr := r.parse(data)
+	fmt.Printf("state %s", r.state)
+	if pErr != nil {
+		return 0, pErr
+	}
+
+	if r.Body.CurrentCL != r.Body.ContentLength {
+		return 0, fmt.Errorf("body's len does not match content length %d != %d",
+			r.Body.CurrentCL, r.Body.ContentLength)
+	}
+	r.state = done
+	return parseN, nil
 }
