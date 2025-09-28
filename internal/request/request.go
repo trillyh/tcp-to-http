@@ -1,18 +1,19 @@
 package request
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"https/internal/body"
+	"https/internal/headers"
 	"io"
 	"strings"
 	"unicode"
-	"https/internal/headers"
-	"bytes"
-	"errors"
 )
 
 func (r *RequestLine) ValidHTTP() bool {
 	return r.HttpVersion == "1.1"
-} 
+}
 
 func (r *RequestLine) ValidMethod() bool {
 	isAllUpper := strings.ToUpper(r.Method) == r.Method 
@@ -32,9 +33,9 @@ const (
     initialized   parserState = "init"
     parsingRl     parserState = "parsingRl"
     parsingHeader parserState = "parsingHeader"
+		parsingBody 	parserState = "parsingBody"
     done          parserState = "done"
 )
-
 
 type RequestLine struct {
 	HttpVersion   string
@@ -45,6 +46,7 @@ type RequestLine struct {
 type Request struct {
 	RequestLine RequestLine // Ex: GET /coffee HTTP/1.1
 	Headers *headers.Headers
+	Body *body.Body
 	state parserState
 }
 
@@ -121,7 +123,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, nil
 		}
 
-		r.RequestLine = *rl
+		r.RequestLine = *rl 
 		r.state = parsingHeader
 
 		return n, nil
@@ -136,11 +138,29 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		if isHeaderDone {
+			cl := r.Headers.Get("content-length") 
+			if cl == "" {
+				r.state = done
+			} else {
+				r.state = parsingBody
+			}
+			return n, err 
+		}
+		return n, err
+
+	case parsingBody:
+		n, isBodyDone, err := r.Body.Parse(data)
+		if err != nil {
+			return n, err
+		}	
+
+		if isBodyDone {
 			r.state = done
 			return n, err
 		}
 		return n, err
 	}
+
 	return 0, nil
 }
 
@@ -182,6 +202,5 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		copy(buf, buf[parsedN:bufLen])
 		bufLen -= parsedN 	
 	}
-
 	return request, nil
 }
