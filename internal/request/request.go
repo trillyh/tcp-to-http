@@ -130,7 +130,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 					r.state = done
 					return n, fmt.Errorf("erorr when trying to convert contentlength to int")
 				}
-				r.state = parsingBody
+				if r.Body.ContentLength == 0 {r.state = done} else {r.state = parsingBody}
 			}
 			return n, err 
 		}
