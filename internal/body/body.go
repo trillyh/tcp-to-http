@@ -1,7 +1,7 @@
 package body
 
 import (
-	"bytes"
+//	"bytes"
 	"fmt"
 )
 type Body struct {
@@ -24,7 +24,11 @@ var ErrExtractContentLengthFailed = fmt.Errorf("failed to extract content length
 // Return the bytes consumed
 // If the parse found contentLength, update and return immedietly
 func (b *Body) Parse(data []byte) (int, bool, error) {
-	idx := bytes.Index(data, CRLF)
+	// ----------------> CHECK IF LEN(DATA) + CURRENTCL == EXPECTED CONTENT LENGTH ELSE RETURN
+	fmt.Printf("Body.Parse with %s" , string(data))
+	//idx := bytes.Index(data, CRLF)
+	idx := len(data)
+	fmt.Printf("HERE----> %d", idx)
 	if idx == -1 { // not enough data
 		return 0, false, nil
 	}
@@ -33,12 +37,14 @@ func (b *Body) Parse(data []byte) (int, bool, error) {
 		return 0, true, nil
 	}
 
-	consumedN := idx + len(CRLF)
+	//consumedN := idx + len(CRLF)
+	consumedN := idx
 	currLine := data[:idx]
 	// Todo refractor this
-	b.Body += string(currLine) + "\n" // add back the /n
+	//b.Body += string(currLine) + "\n" // add back the /n
+	b.Body += string(currLine) // add back the /n
 
 	b.CurrentCL += consumedN
-
-	return consumedN, b.CurrentCL == consumedN, nil
+	fmt.Printf("b.CurrentCL %d contentLength %d", b.CurrentCL, b.ContentLength)
+	return consumedN, b.CurrentCL == b.ContentLength, nil
 }

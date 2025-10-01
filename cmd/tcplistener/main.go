@@ -46,6 +46,7 @@ func main() {
 			for k, v := range r.Headers.All() {
 				fmt.Printf("- %s: %s\n", k, v)
 			}
+			if r.Body.ContentLength > 0 {fmt.Printf("Body:\n%s", r.Body.Body)}
 		}(conn)
 	}
 }
