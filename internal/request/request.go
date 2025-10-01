@@ -120,32 +120,39 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, err
 		}
 		if isHeaderDone {
-			cl := r.Headers.Get("content-length") 
-			if cl == "" { // nothing in body to parse
-				r.state = done
-
-			} else {
-				r.Body.ContentLength, err = strconv.Atoi(cl)
-				if err != nil {
-					r.state = done
-					return n, fmt.Errorf("erorr when trying to convert contentlength to int")
-				}
-				if r.Body.ContentLength == 0 {r.state = done} else {r.state = parsingBody}
-				fmt.Printf("ContentLength is %d", r.Body.ContentLength)
-			}
-			return n, err 
+				fmt.Println("header done")
+				r.state = parsingBody
+				return n, nil
 		}
 		return n, nil
 	case parsingBody:
-		n, isBodyDone, err := r.Body.Parse(data)
-		if err != nil {
-			return n, err
-		}	
-		if isBodyDone {
+		cl := r.Headers.Get("content-length") 
+		length := 0
+		if cl == "" { // nothing in body to parse
 			r.state = done
-			return n, nil
+			return 0, nil
+		} 
+		length, err := strconv.Atoi(cl)
+		if err != nil {
+			return 0, fmt.Errorf("erorr when trying to convert contentlength to int")
 		}
-		return n, nil
+		r.Body.ContentLength = length
+		if length == 0 {
+			r.state = done
+			return 0, nil
+		}
+		// remaining in body awaiting to be parsed
+		remaining := min(length - len(r.Body.Body), len(data))
+		r.Body.Body += string(data[:remaining])
+		//n, isBodyDone, err := r.Body.Parse(data)
+		//if err != nil {
+			//return n, err
+		//}	
+		if len(r.Body.Body) == length {
+			r.state = done
+			return remaining, nil
+		}
+		return remaining, nil
 	
 	case done:
 		return 0, fmt.Errorf("error trying to read in done state")
@@ -156,7 +163,6 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 func (r *Request) parse(data []byte) (int, error) {
 	parsedN := 0
 	for r.state != done {
-		if r.state == parsingBody {fmt.Println(string(data))}
 		n, err := r.parseSingle(data[parsedN:])
 		if err != nil {
 			return 0, err
@@ -224,14 +230,10 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func drainAndParse(r *Request, data []byte) (int, error) {
-	fmt.Printf("draining buffer with bufLen %d, \"%s\" \n", len(data), string(data))
 	parseN, pErr := r.parse(data)
-	fmt.Printf("state %s\n", r.state)
 	if pErr != nil {
 		return 0, pErr
 	}
-	fmt.Printf("drained and done ParseN %d", parseN)
-	fmt.Println(r.Body.Body)
 
 	if r.Body.CurrentCL != r.Body.ContentLength {
 		return 0, fmt.Errorf("body's len does not match content length %d != %d",
