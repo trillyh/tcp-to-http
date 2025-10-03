@@ -1,9 +1,5 @@
 package body
 
-import (
-//	"bytes"
-	"fmt"
-)
 type Body struct {
 	Body string
 	ContentLength int
@@ -11,40 +7,25 @@ type Body struct {
 }
 
 func NewBody() *Body {
-	return &Body {
-		Body: string(""),
+	return &Body { Body: string(""),
 		ContentLength: 0,
 		CurrentCL: 0,
 	}
 }
 
-var CRLF = []byte("\n")
-var ErrExtractContentLengthFailed = fmt.Errorf("failed to extract content length")
-// Parse will be called multiple time, each time should consume at least one line.
-// Return the bytes consumed
-// If the parse found contentLength, update and return immedietly
+func (b *Body) SetLength(cl int) {
+	b.ContentLength = cl
+}
+
 func (b *Body) Parse(data []byte) (int, bool, error) {
-	// ----------------> CHECK IF LEN(DATA) + CURRENTCL == EXPECTED CONTENT LENGTH ELSE RETURN
-	fmt.Printf("Body.Parse with %s" , string(data))
-	//idx := bytes.Index(data, CRLF)
-	idx := len(data)
-	fmt.Printf("HERE----> %d", idx)
-	if idx == -1 { // not enough data
-		return 0, false, nil
+	// remaining in body awaiting to be parsed
+	// min b/c we want to make sure that we only parse the Body
+	// prevent parsing next request ["BODY" + some of REQUEST2]
+	remaining := min(b.ContentLength - len(b.Body), len(data))
+	b.Body += string(data[:remaining])
+
+	if len(b.Body) == b.ContentLength {
+		return remaining, true, nil
 	}
-
-	if idx == 0 { // last CRFL at the end
-		return 0, true, nil
-	}
-
-	//consumedN := idx + len(CRLF)
-	consumedN := idx
-	currLine := data[:idx]
-	// Todo refractor this
-	//b.Body += string(currLine) + "\n" // add back the /n
-	b.Body += string(currLine) // add back the /n
-
-	b.CurrentCL += consumedN
-	fmt.Printf("b.CurrentCL %d contentLength %d", b.CurrentCL, b.ContentLength)
-	return consumedN, b.CurrentCL == b.ContentLength, nil
+	return remaining, false, nil
 }

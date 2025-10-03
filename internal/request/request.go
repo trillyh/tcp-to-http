@@ -133,27 +133,15 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, nil
 		} 
 		length, err := strconv.Atoi(cl)
-		if err != nil {
-			return 0, fmt.Errorf("erorr when trying to convert contentlength to int")
-		}
-		r.Body.ContentLength = length
-		if length == 0 {
+		if err != nil {return 0, fmt.Errorf("error when trying to convert contentlength to int")}
+		r.Body.SetLength(length)
+		n, isDone, err := r.Body.Parse(data)	
+		if err != nil {return 0, fmt.Errorf("error when parsing the body")}
+		if isDone {
 			r.state = done
-			return 0, nil
+			return n, nil
 		}
-		// remaining in body awaiting to be parsed
-		remaining := min(length - len(r.Body.Body), len(data))
-		r.Body.Body += string(data[:remaining])
-		//n, isBodyDone, err := r.Body.Parse(data)
-		//if err != nil {
-			//return n, err
-		//}	
-		if len(r.Body.Body) == length {
-			r.state = done
-			return remaining, nil
-		}
-		return remaining, nil
-	
+		return n, nil
 	case done:
 		return 0, fmt.Errorf("error trying to read in done state")
 	}
