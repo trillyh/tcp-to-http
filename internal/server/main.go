@@ -5,10 +5,12 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"atomic"
 )
 
 type Server struct {
 	listener net.Listener
+	close atomic.Bool
 }
 
 // Creates a net.Listener and returns a new Server instance. Starts listening for requests inside a goroutine.
@@ -50,7 +52,14 @@ Handle single conection then close
 */
 func (s *Server) handle(conn net.Conn) {
 	fmt.Println("Handling the new connection")
-	response := []byte("HTTP/1.1 200 OK\nContent-Type: text/plain\nContent-Length: 13\nHello World!")
-	conn.Write(response)
+	response := "HTTP/1.1 200 OK\r\n" +
+	"Content-Type: text/plain\r\n" +
+	"Content-Length: 12\r\n" + // "Hello World!" is 12 bytes
+	"\r\n" +                   // blank line separates headers from body
+	"Hello World!"
+	_, err := conn.Write([]byte(response))
+	if err != nil {
+		log.Fatal("Error ")
+	}
 	conn.Close()
 }
