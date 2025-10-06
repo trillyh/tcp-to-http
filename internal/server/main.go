@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 	"strconv"
-	"atomic"
+	"sync/atomic"
 )
 
 type Server struct {
@@ -29,6 +29,7 @@ func Serve(port int) (*Server, error)  {
 
 func (s *Server) Close() error {
 	err := s.listener.Close()
+	s.close.Store(true)
 	return err
 }
 
@@ -40,7 +41,11 @@ func (s *Server) listen() {
 	 for {
 		conn, err := s.listener.Accept()
 		if err != nil {
+			if s.close.Load() {
+				return
+			}
 			log.Fatal(err)
+			continue
 		}
 		fmt.Println("New connection accepted")
 		go s.handle(conn)
