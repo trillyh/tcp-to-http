@@ -56,15 +56,17 @@ func (s *Server) listen() {
 Handle single conection then close
 */
 func (s *Server) handle(conn net.Conn) {
+	defer conn.Close() // DOC: why we defer instead of putting it in the end
 	fmt.Println("Handling the new connection")
-	response := "HTTP/1.1 200 OK\r\n" +
-	"Content-Type: text/plain\r\n" +
-	"Content-Length: 12\r\n" + // "Hello World!" is 12 bytes
-	"\r\n" +                   // blank line separates headers from body
-	"Hello World!"
-	_, err := conn.Write([]byte(response))
+	err := WriteStatusLine(conn, Ok)
 	if err != nil {
-		log.Fatal("Error ")
+    log.Printf("write status line: %v", err)
+    return
 	}
-	conn.Close()
+	body := ""
+	h := GetDefaultHeaders(len(body)) // 0 if ""
+	err = WriteHeaders(conn, h)
+	if err != nil {
+		log.Fatal("error when writing header")
+	}
 }

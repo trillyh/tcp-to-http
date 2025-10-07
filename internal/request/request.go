@@ -13,7 +13,7 @@ import (
 )
 
 func (r *RequestLine) ValidHTTP() bool {
-	return r.HttpVersion == "1.1"
+	return r.HTTPVersion == "1.1"
 }
 
 func (r *RequestLine) ValidMethod() bool {
@@ -39,7 +39,7 @@ const (
 )
 
 type RequestLine struct {
-	HttpVersion   string
+	HTTPVersion   string
 	RequestTarget string
 	Method        string
 }
@@ -84,7 +84,7 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 	requestLine := &RequestLine{
 		Method: string(requestLineParts[0]),
 		RequestTarget: string(requestLineParts[1]),
-		HttpVersion: string(versionParts[1]),
+		HTTPVersion: string(versionParts[1]),
 	}
 
 	if !requestLine.ValidHTTP() {
