@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"https/internal/request"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -13,6 +16,17 @@ type Server struct {
 	close atomic.Bool
 }
 
+type HandlerError struct {
+	StatusCode StatusCode
+	Message string
+}
+const(
+
+)
+
+
+type Handler func(w io.Writer, req *request.Request) *HandlerError 
+
 func (s *Server) Close() error {
 	err := s.listener.Close()
 	s.close.Store(true)
@@ -22,20 +36,23 @@ func (s *Server) Close() error {
 /*
 Handle single conection then close
 */
-func (s *Server) handleConnection(conn net.Conn) {
+func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	defer conn.Close() // DOC: why we defer instead of putting it in the end
+	
 	fmt.Println("Handling the new connection")
-	err := WriteStatusLine(conn, Ok)
-	if err != nil {
-    log.Printf("write status line: %v", err)
-    return
-	}
 	body := ""
 	h := GetDefaultHeaders(len(body)) // 0 if ""
-	err = WriteHeaders(conn, h)
+	
+
+	r, err := request.RequestFromReader(conn)
 	if err != nil {
-		log.Fatal("error when writing header")
+		WriteStatusLine(conn, StatusBadRequest)
+		WriteHeaders(conn, h)
 	}
+	writer := bytes.NewBuffer([]byte{})
+	handlerError := handler(writer, r)
+	WriteStatusLine(conn, StatusBadRequest)
+	WriteHeaders(conn, h)
 }
 
 /* 

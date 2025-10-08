@@ -31,11 +31,11 @@ func (r *RequestLine) ValidMethod() bool {
 
 type parserState string
 const (
-    initialized   parserState = "init"
-    parsingRl     parserState = "parsingRl"
-    parsingHeader parserState = "parsingHeader"
-		parsingBody 	parserState = "parsingBody"
-    done          parserState = "done"
+    StateInitialized   parserState = "init"
+    StateParsingRequestLine     parserState = "parsingRl"
+    StateParsingHeaders parserState = "parsingHeaders"
+		StateParsingBody 	parserState = "parsingBody"
+    StateDone          parserState = "done"
 )
 
 type RequestLine struct {
@@ -53,7 +53,7 @@ type Request struct {
 
 func NewRequest() *Request {
 	return &Request {
-		state: initialized,
+		state: StateInitialized,
 		Body: body.NewBody(),
 	}
 }
@@ -100,7 +100,7 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
  
 func (r *Request) parseSingle(data []byte) (int, error) {
 	switch r.state {
-	case parsingRl:
+	case StateParsingRequestLine:
 		rl, n, err := parseRequestLine(data)
 		if err != nil {
 			return 0, err
@@ -109,9 +109,9 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, nil
 		}
 		r.RequestLine = *rl 
-		r.state = parsingHeader
+		r.state = StateParsingHeaders
 		return n, nil
-	case parsingHeader:
+	case StateParsingHeaders:
 		if r.Headers == nil {
 			r.Headers = headers.NewHeaders()
 		}
@@ -121,15 +121,15 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 		if isHeaderDone {
 				fmt.Println("header done")
-				r.state = parsingBody
+				r.state = StateParsingBody
 				return n, nil
 		}
 		return n, nil
-	case parsingBody:
+	case StateParsingBody:
 		cl := r.Headers.Get("content-length") 
 		length := 0
 		if cl == "" { // nothing in body to parse
-			r.state = done
+			r.state = StateDone
 			return 0, nil
 		} 
 		length, err := strconv.Atoi(cl)
@@ -138,11 +138,11 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		n, isDone, err := r.Body.Parse(data)	
 		if err != nil {return 0, fmt.Errorf("error when parsing the body")}
 		if isDone {
-			r.state = done
+			r.state = StateDone
 			return n, nil
 		}
 		return n, nil
-	case done:
+	case StateDone:
 		return 0, fmt.Errorf("error trying to read in done state")
 	}
 	return 0, fmt.Errorf("unknown state")
@@ -150,7 +150,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 
 func (r *Request) parse(data []byte) (int, error) {
 	parsedN := 0
-	for r.state != done {
+	for r.state != StateDone {
 		n, err := r.parseSingle(data[parsedN:])
 		if err != nil {
 			return 0, err
@@ -170,8 +170,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, 1024)
 	bufLen := 0 // valid bytes currently in the buffer
 
-	r.state = parsingRl
-	for r.state != done {
+	r.state = StateParsingRequestLine
+	for r.state != StateDone {
 		// Read and append to buf at right side of buf[bufLen] 
 		// buf[bufLen:] is the remaining free space of the buffer
 		n, err := reader.Read(buf[bufLen:]) 
@@ -196,7 +196,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		switch {
 		case errors.Is(err, io.EOF):
 				// drain buffer
-				if (bufLen > 0 && r.state != done) {
+				if (bufLen > 0 && r.state != StateDone) {
 					parseN, pErr := drainAndParse(r, buf[:bufLen])
 					if pErr != nil {
 						return nil, err
@@ -206,7 +206,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 					// after this r.state should be done, else err
 				}
 
-				if r.state != done {
+				if r.state != StateDone {
 					return nil, fmt.Errorf("incomplete request, in state: %s, read n bytes on EOF: %d", r.state, n)
 				}	
 				
@@ -227,6 +227,6 @@ func drainAndParse(r *Request, data []byte) (int, error) {
 		return 0, fmt.Errorf("body's len does not match content length %d != %d",
 			r.Body.CurrentCL, r.Body.ContentLength)
 	}
-	r.state = done
+	r.state = StateDone
 	return parseN, nil
 }

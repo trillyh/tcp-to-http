@@ -12,23 +12,24 @@ import (
 	"io"
 	"strconv"
 )
-type StatusCode int
 
+
+type StatusCode int
 const (
-	Ok StatusCode = 200
-	BadRequest StatusCode = 400
-	InternalServerError StatusCode = 500
+	StatusOk StatusCode = 200
+	StatusBadRequest StatusCode = 400
+	StatusInternalServerError StatusCode = 500
 )
 
 func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	// RFC 9112 status-line = HTTP-version SP status-code SP [ reason-phrase ]
 	var statusLine []byte 
 	switch statusCode {
-	case Ok:
+	case StatusOk:
 		statusLine = []byte("HTTP/1.1 200 OK \r\n")
-	case BadRequest:
+	case StatusBadRequest:
 		statusLine = []byte("HTTP/1.1 400 Bad Request \r\n")
-	case InternalServerError:
+	case StatusInternalServerError:
 		statusLine = []byte("HTTP/1.1 500 Internal Server Error \r\n")
 	default:
 		statusLine = []byte(" \r\n")
