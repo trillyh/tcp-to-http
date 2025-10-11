@@ -11,27 +11,27 @@ import (
 	"sync/atomic"
 )
 
-type Server struct {
-	listener net.Listener
-	close atomic.Bool
-}
-
 type HandlerError struct {
 	StatusCode StatusCode
 	Message string
 }
-const(
+type Handler func(w io.Writer, req *request.Request) *HandlerError
 
-)
+type Server struct {
+	listener net.Listener
+	close atomic.Bool
+	handler Handler
+}
 
-
-type Handler func(w io.Writer, req *request.Request) *HandlerError 
 
 func (s *Server) Close() error {
 	err := s.listener.Close()
 	s.close.Store(true)
 	return err
 }
+
+
+func myHandler(w io.Writer, req *request.Request) *HandlerError
 
 /*
 Handle single conection then close
@@ -48,9 +48,11 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	if err != nil {
 		WriteStatusLine(conn, StatusBadRequest)
 		WriteHeaders(conn, h)
+		return
 	}
 	writer := bytes.NewBuffer([]byte{})
 	handlerError := handler(writer, r)
+	writer.Write([]byte(handlerError.Message))
 	WriteStatusLine(conn, StatusBadRequest)
 	WriteHeaders(conn, h)
 }
@@ -75,7 +77,7 @@ func (s *Server) runServer() {
 }
 
 // Creates a net.Listener and returns a new Server instance. Starts listening for requests inside a goroutine.
-func Serve(port int) (*Server, error)  {
+func Serve(port int) (*Server, error) {
 	portStr := ":" + strconv.Itoa(port)
 	listener, err := net.Listen("tcp", portStr)
 	if err != nil {
