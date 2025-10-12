@@ -15,6 +15,7 @@ type HandlerError struct {
 	StatusCode StatusCode
 	Message string
 }
+// The handler writes a success response body to w if everything goes well and returns nil
 type Handler func(w io.Writer, req *request.Request) *HandlerError
 
 type Server struct {
@@ -30,9 +31,6 @@ func (s *Server) Close() error {
 	return err
 }
 
-
-func myHandler(w io.Writer, req *request.Request) *HandlerError
-
 /*
 Handle single conection then close
 */
@@ -40,10 +38,9 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	defer conn.Close() // DOC: why we defer instead of putting it in the end
 	
 	fmt.Println("Handling the new connection")
-	body := ""
+	body := []byte("")
 	h := GetDefaultHeaders(len(body)) // 0 if ""
 	
-
 	r, err := request.RequestFromReader(conn)
 	if err != nil {
 		WriteStatusLine(conn, StatusBadRequest)
@@ -52,9 +49,18 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	}
 	writer := bytes.NewBuffer([]byte{})
 	handlerError := handler(writer, r)
-	writer.Write([]byte(handlerError.Message))
+
+	if handlerError != nil {
+		// Handler signaled failure -> send the error status ()
+		WriteStatusLine(conn, handlerError.StatusCode)
+		WriteHeaders(conn, h)
+		return
+	}
+	body = writer.Bytes()
+	h.Replace("content-length", string(body))
 	WriteStatusLine(conn, StatusBadRequest)
 	WriteHeaders(conn, h)
+	conn.Write(body)
 }
 
 /* 
@@ -72,7 +78,7 @@ func (s *Server) runServer() {
 			continue
 		}
 		fmt.Println("New connection accepted")
-		go s.handleConnection(conn)
+		go s.handleConnection(conn, s.handler)
 	}
 }
 

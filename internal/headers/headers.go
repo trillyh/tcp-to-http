@@ -30,6 +30,11 @@ func (h *Headers) Set(name string, value string) {
 	}
 }
 
+func (h *Headers) Replace(name string, value string) {
+	name = strings.ToLower(name)
+	h.headers[name] = value	
+}
+
 func (h *Headers) All() map[string]string {
 	if h == nil {
 		return nil
