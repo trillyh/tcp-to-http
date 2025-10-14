@@ -24,7 +24,6 @@ type Server struct {
 	handler Handler
 }
 
-
 func (s *Server) Close() error {
 	err := s.listener.Close()
 	s.close.Store(true)
@@ -38,13 +37,14 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	defer conn.Close() // DOC: why we defer instead of putting it in the end
 	
 	fmt.Println("Handling the new connection")
-	body := []byte("")
-	h := GetDefaultHeaders(len(body)) // 0 if ""
 	
 	r, err := request.RequestFromReader(conn)
 	if err != nil {
+		body := []byte("Bad request\n")
+		h := GetDefaultHeaders(len(body))
 		WriteStatusLine(conn, StatusBadRequest)
 		WriteHeaders(conn, h)
+		conn.Write(body)
 		return
 	}
 	writer := bytes.NewBuffer([]byte{})
@@ -52,13 +52,18 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 
 	if handlerError != nil {
 		// Handler signaled failure -> send the error status ()
+		body := []byte(handlerError.Message)
+		h := GetDefaultHeaders(len(body))
+		h.Replace("content-length", fmt.Sprintf("%d", len(body)))
 		WriteStatusLine(conn, handlerError.StatusCode)
 		WriteHeaders(conn, h)
+		conn.Write([]byte(body))
 		return
 	}
-	body = writer.Bytes()
-	h.Replace("content-length", string(body))
-	WriteStatusLine(conn, StatusBadRequest)
+	body := writer.Bytes()
+	h := GetDefaultHeaders(len(body))
+	h.Replace("content-length", fmt.Sprintf("%d", len(body)))
+	WriteStatusLine(conn, StatusOk)
 	WriteHeaders(conn, h)
 	conn.Write(body)
 }
@@ -74,7 +79,7 @@ func (s *Server) runServer() {
 			if s.close.Load() {
 				return
 			}
-			log.Fatal(err)
+      log.Printf("accept error: %v", err)
 			continue
 		}
 		fmt.Println("New connection accepted")
@@ -83,15 +88,15 @@ func (s *Server) runServer() {
 }
 
 // Creates a net.Listener and returns a new Server instance. Starts listening for requests inside a goroutine.
-func Serve(port int) (*Server, error) {
+func Serve(port int, handler Handler) (*Server, error) {
 	portStr := ":" + strconv.Itoa(port)
 	listener, err := net.Listen("tcp", portStr)
 	if err != nil {
 		return nil, fmt.Errorf("error when creating listener for port %d", port)
 	}
-	defer listener.Close()
 	server := &Server {
 		listener: listener,
+		handler: handler,
 	}
 	go server.runServer()
 	return server, nil
