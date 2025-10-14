@@ -47,23 +47,21 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 		conn.Write(body)
 		return
 	}
+	h := GetDefaultHeaders(0)
 	writer := bytes.NewBuffer([]byte{})
 	handlerError := handler(writer, r)
 
+	var body []byte = nil
+	var status StatusCode = StatusOk
 	if handlerError != nil {
 		// Handler signaled failure -> send the error status ()
-		body := []byte(handlerError.Message)
-		h := GetDefaultHeaders(len(body))
-		h.Replace("content-length", fmt.Sprintf("%d", len(body)))
-		WriteStatusLine(conn, handlerError.StatusCode)
-		WriteHeaders(conn, h)
-		conn.Write([]byte(body))
-		return
+		status = handlerError.StatusCode
+		body = []byte(handlerError.Message)
+	} else {
+		body = writer.Bytes()
 	}
-	body := writer.Bytes()
-	h := GetDefaultHeaders(len(body))
 	h.Replace("content-length", fmt.Sprintf("%d", len(body)))
-	WriteStatusLine(conn, StatusOk)
+	WriteStatusLine(conn, status)
 	WriteHeaders(conn, h)
 	conn.Write(body)
 }
