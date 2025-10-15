@@ -18,7 +18,7 @@ func TestRequestLineParse(t *testing.T) {
 	require.NotNil(t, r)
 	assert.Equal(t, "GET", r.RequestLine.Method)
 	assert.Equal(t, "/", r.RequestLine.RequestTarget)
-	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+	assert.Equal(t, "1.1", r.RequestLine.HTTPVersion)
 
 	// Test: Good GET Request line with path
 	reader = &chunkReader{
@@ -30,7 +30,16 @@ func TestRequestLineParse(t *testing.T) {
 	require.NotNil(t, r)
 	assert.Equal(t, "GET", r.RequestLine.Method)
 	assert.Equal(t, "/coffee", r.RequestLine.RequestTarget)
-	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+	assert.Equal(t, "1.1", r.RequestLine.HTTPVersion)
+
+
+	// Test: Invalid HTTPVersion in request line
+	reader = &chunkReader{
+		data:            "GET /coffee HTTP/1.8\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
+		numBytesPerRead: 1,
+	}
+	_, err = RequestFromReader(reader)
+	assert.Error(t, err)
 }
 
 func TestRequest(t *testing.T) {
@@ -121,10 +130,8 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 	if cr.pos >= len(cr.data) {
 		return 0, io.EOF
 	}
-	endIndex := cr.pos + cr.numBytesPerRead
-	if endIndex > len(cr.data) {
-		endIndex = len(cr.data)
-	}
+	endIndex := cr.pos + cr.numBytesPerRead	
+	endIndex = min(endIndex,len(cr.data))
 	n = copy(p, cr.data[cr.pos:endIndex])
 	cr.pos += n
 

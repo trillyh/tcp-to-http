@@ -1,15 +1,25 @@
+// Package body provides a small helper for incrementally assembling a fixed-
+// length request body from arbitrary byte chunks (e.g., as they arrive from a
+// network connection). The caller sets the expected byte length up front and
+// then feeds chunks via Parse until the body is complete.
 package body
 
+// Body holds state for assembling a fixed-length payload.
+//
+// Invariants:
+//   - ContentLength is the total number of bytes expected.
+//   - len(Body) is the number of bytes accumulated so far.
+//   - When len(Body) == ContentLength, the body is complete.
+//
+// This type is NOT safe for concurrent use without external synchronization.
 type Body struct {
 	Body string
-	ContentLength int
-	CurrentCL int
+	ContentLength int // Must be >= 0
 }
 
 func NewBody() *Body {
 	return &Body { Body: string(""),
 		ContentLength: 0,
-		CurrentCL: 0,
 	}
 }
 
