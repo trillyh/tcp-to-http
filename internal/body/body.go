@@ -27,10 +27,17 @@ func (b *Body) SetLength(cl int) {
 	b.ContentLength = cl
 }
 
-func (b *Body) Parse(data []byte) (int, bool, error) {
-	// remaining in body awaiting to be parsed
-	// min b/c we want to make sure that we only parse the Body
-	// prevent parsing next request ["BODY" + some of REQUEST2]
+// Parse appends up to the remaining number of bytes from data into the Body,
+// returning (consumed, done, err):
+//   - consumed: how many bytes from data were used
+//   - done: whether the body is now complete (len(Body) == ContentLength)
+//   - err: non-nil only on error (e.g., ContentLength < current size)
+//
+// Parse never over-reads beyond ContentLength. Extra bytes in data are not
+// consumed and should be supplied to the next higher-level parser in request
+// min b/c we want to make sure that we only parse the Body
+// prevent parsing next request ["BODY" + some of REQUEST2]
+func (b *Body) Parse(data []byte) (consumed int, done bool, err error) {	
 	remaining := min(b.ContentLength - len(b.Body), len(data))
 	b.Body += string(data[:remaining])
 
