@@ -1,4 +1,4 @@
-package server
+package response
 
 /* 
 TODO: Consider these as well
@@ -21,7 +21,23 @@ const (
 	StatusInternalServerError StatusCode = 500
 )
 
-func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
+type Writer struct {
+	writer io.Writer	
+}
+
+func NewWriter(writer io.Writer) *Writer {
+	return &Writer{writer: writer}
+}
+
+func GetDefaultHeaders(contentLen int) headers.Headers {
+	h := headers.NewHeaders()
+	h.Set("Content-Length", strconv.Itoa(contentLen))
+	h.Set("Connection", "close")
+	h.Set("Content-Type", "text/plain")
+	return *h
+}
+
+func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	// RFC 9112 status-line = HTTP-version SP status-code SP [ reason-phrase ]
 	var statusLine []byte 
 	switch statusCode {
@@ -34,50 +50,32 @@ func WriteStatusLine(w io.Writer, statusCode StatusCode) error {
 	default:
 		statusLine = []byte(" \r\n")
 	}
-	_, err := w.Write(statusLine)
+	_, err := w.writer.Write(statusLine)
 	if err != nil {
 		return fmt.Errorf("error when writing statusCode: %w", err)
 	}
 	return nil
 }
 
-func GetDefaultHeaders(contentLen int) headers.Headers {
-	h := headers.NewHeaders()
-	h.Set("Content-Length", strconv.Itoa(contentLen))
-	h.Set("Connection", "close")
-	h.Set("Content-Type", "text/plain")
-	return *h
-}
-
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
 	for k, v := range headers.All() {
 		hStr := fmt.Sprintf("%s: %s\r\n", k, v)
 		fmt.Println(hStr)
-		_, err := w.Write([]byte(hStr))
+		_, err := w.writer.Write([]byte(hStr))
 		if err != nil {
 			return fmt.Errorf("error when writing header %w", err)
 		}
 	}
 
-	if _, err := w.Write([]byte("\r\n")); err != nil {
+	if _, err := w.writer.Write([]byte("\r\n")); err != nil {
 		return fmt.Errorf("error when writing header terminator: %w", err)
 	}
 
 	return nil
 }
 
-type Writer struct{}
-func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
-
-	return nil
-}
-
-func (w *Writer) WriteHeaders(headers headers.Headers) error {
-
-	return nil
-}
-
 func (w *Writer) WriteBody(p []byte) (int, error) {
+	n, err := w.writer.Write(p)
 
-	return 0, nil
+	return n, err
 }

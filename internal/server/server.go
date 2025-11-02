@@ -1,10 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"https/internal/request"
-	"io"
+	"https/internal/response"
 	"log"
 	"net"
 	"strconv"
@@ -12,11 +11,12 @@ import (
 )
 
 type HandlerError struct {
-	StatusCode StatusCode
+	StatusCode response.StatusCode
 	Message string
 }
+
 // The handler writes a success response body to w if everything goes well and returns nil
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request)
 
 type Server struct {
 	listener net.Listener
@@ -38,32 +38,15 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	
 	fmt.Println("Handling the new connection")
 	
+	responseWriter := response.NewWriter(conn)
 	r, err := request.RequestFromReader(conn)
 	if err != nil {
-		body := []byte("Bad request\n")
-		h := GetDefaultHeaders(len(body))
-		WriteStatusLine(conn, StatusBadRequest)
-		WriteHeaders(conn, h)
-		conn.Write(body)
+		h := response.GetDefaultHeaders(0)
+		responseWriter.WriteStatusLine(response.StatusBadRequest)
+		responseWriter.WriteHeaders(h)
 		return
 	}
-	h := GetDefaultHeaders(0)
-	writer := bytes.NewBuffer([]byte{})
-	handlerError := handler(writer, r)
-
-	var body []byte = nil
-	var status StatusCode = StatusOk
-	if handlerError != nil {
-		// Handler signaled failure -> send the error status ()
-		status = handlerError.StatusCode
-		body = []byte(handlerError.Message)
-	} else {
-		body = writer.Bytes()
-	}
-	h.Replace("content-length", fmt.Sprintf("%d", len(body)))
-	WriteStatusLine(conn, status)
-	WriteHeaders(conn, h)
-	conn.Write(body)
+	s.handler(responseWriter, r)
 }
 
 /* 
