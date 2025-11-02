@@ -41,9 +41,8 @@ func (s *Server) handleConnection(conn net.Conn, handler Handler) {
 	responseWriter := response.NewWriter(conn)
 	r, err := request.RequestFromReader(conn)
 	if err != nil {
-		h := response.GetDefaultHeaders(0)
 		responseWriter.WriteStatusLine(response.StatusBadRequest)
-		responseWriter.WriteHeaders(h)
+		responseWriter.WriteHeaders(response.GetDefaultHeaders(0))
 		return
 	}
 	s.handler(responseWriter, r)

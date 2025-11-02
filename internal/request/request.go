@@ -217,15 +217,16 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	return r, nil
 }
 
+// last drain
 func drainAndParse(r *Request, data []byte) (int, error) {
 	parseN, pErr := r.parse(data)
 	if pErr != nil {
 		return 0, pErr
 	}
 
-	if r.Body.CurrentCL != r.Body.ContentLength {
+	if len(r.Body.Body) != r.Body.ContentLength {
 		return 0, fmt.Errorf("body's len does not match content length %d != %d",
-			r.Body.CurrentCL, r.Body.ContentLength)
+			len(r.Body.Body), r.Body.ContentLength)
 	}
 	r.state = StateDone
 	return parseN, nil
