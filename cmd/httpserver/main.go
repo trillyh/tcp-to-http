@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"https/internal/headers"
 	"https/internal/request"
 	"https/internal/response"
 	"https/internal/server"
@@ -70,10 +72,12 @@ func proxyHandler(w *response.Writer, req *request.Request) {
 	h.Delete("Content-Length")	
 	h.Set("Transfer-Encoding", "chunked")
 	h.Replace("Content-Type", "text/plain")
+	h.Replace("Trailer", "X-Content-Length, X-Content-Sha256")
 	w.WriteHeaders(h)
 
 	const maxChunkSize = 1024
 	data := make([]byte, maxChunkSize)
+	xContentLength := 0
 	for {
 		n, err := res.Body.Read(data)
 		if n > 0 {
@@ -81,6 +85,7 @@ func proxyHandler(w *response.Writer, req *request.Request) {
 			if err != nil {
 				fmt.Println("Error when writing chunked body")
 			}
+			xContentLength += n
 		}
 		if err == io.EOF {
 			break
@@ -92,10 +97,17 @@ func proxyHandler(w *response.Writer, req *request.Request) {
 	}
 
 	_, err = w.WriteChunkedBodyDone()
+	fmt.Println("Done with chunk")
 	if err != nil {
 		fmt.Println("Error writing BodyDone", err)
 	}
-
+	trailers := headers.NewHeaders()
+	checkSum := sha256.Sum256(w.BodyResponse)
+	hash := checkSum[:]
+	trailers.Set("X-Content-Sha256", fmt.Sprintf("%x", hash))
+	trailers.Set("X-Content-Length", fmt.Sprintf("%d", xContentLength))
+	fmt.Println("X-Content-Sha256: ", trailers.Get("X-Content-Sha256"))
+	w.WriteTrailers(trailers)
 }
 
 func handler(w *response.Writer, req *request.Request) {
@@ -103,7 +115,7 @@ func handler(w *response.Writer, req *request.Request) {
 	body := getBodyResponse200()
 	status := response.StatusOk
 
-	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/stream") {
+	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
 		proxyHandler(w, req)
 
 	} else if req.RequestLine.RequestTarget == "/yourproblem" {	
